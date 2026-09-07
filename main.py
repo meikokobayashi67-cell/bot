@@ -20,10 +20,6 @@ if not TOKEN:
 
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
-# Nombres exactos de modelos soportados por la API
-PRIMARY_MODEL = "gemini-2.5-flash"
-FALLBACK_MODEL = "gemini-1.5-flash-latest"
-
 # =========================
 # SERVIDOR WEB PARA RENDER
 # =========================
@@ -74,29 +70,27 @@ def ask_gemini(prompt: str) -> str:
     
     config = types.GenerateContentConfig(
         system_instruction=system_instruction,
-        max_output_tokens=100,
-        temperature=0.8
+        max_output_tokens=100
     )
 
-    try:
-        response = ai_client.models.generate_content(
-            model=PRIMARY_MODEL,
-            contents=prompt,
-            config=config
-        )
-        return response.text.strip()
-    except Exception as e:
-        print(f"[Error con {PRIMARY_MODEL}]: {e}")
+    # Intentamos primero con gemini-2.5-flash y si falla probamos gemini-1.5-flash
+    models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash"]
+    last_error = None
+
+    for model_name in models_to_try:
         try:
             response = ai_client.models.generate_content(
-                model=FALLBACK_MODEL,
+                model=model_name,
                 contents=prompt,
                 config=config
             )
-            return response.text.strip()
-        except Exception as err2:
-            print(f"[Error con {FALLBACK_MODEL}]: {err2}")
-            raise err2
+            if response.text:
+                return response.text.strip()
+        except Exception as e:
+            print(f"Error con el modelo {model_name}: {e}")
+            last_error = e
+
+    raise last_error
 
 # =========================
 # EVENTOS DE DISCORD
@@ -127,7 +121,7 @@ async def on_message(message):
         async with message.channel.typing():
             try:
                 history_lines = []
-                async for msg in message.channel.history(limit=12, oldest_first=True):
+                async for msg in message.channel.history(limit=10, oldest_first=True):
                     clean_text = msg.content.replace(f"<@{bot.user.id}>", "").strip()
                     if clean_text:
                         author_name = "MEIKO" if msg.author == bot.user else msg.author.display_name
@@ -138,17 +132,17 @@ async def on_message(message):
                     return
 
                 full_prompt = (
-                    "Historial del chat para entender el contexto y la actitud:\n"
+                    "Historial del chat para aprender el contexto:\n"
                     + "\n".join(history_lines) +
-                    "\n\nResponde únicamente al último mensaje como MEIKO cumpliendo todas las reglas."
+                    "\n\nResponde únicamente al último mensaje como MEIKO usando una sola oración sin emojis."
                 )
 
                 reply_text = await asyncio.to_thread(ask_gemini, full_prompt)
                 await message.reply(reply_text)
 
             except Exception as e:
-                print(f"Error procesando mensaje: {e}")
-                await message.reply("No me apetece responder a eso ahora mismo.")
+                print(f"Error en Gemini: {e}")
+                await message.reply(f"Error al conectar con la IA: `{e}`")
 
     await bot.process_commands(message)
 
@@ -166,13 +160,13 @@ async def chat(interaction: discord.Interaction, mensaje: str):
     await interaction.response.defer()
 
     try:
-        user_text = f"{interaction.user.display_name}: {mensaje}"
+        user_text = f"{interaction.user.display_name}: {mensaje}\n\nResponde como MEIKO en una sola oración y sin emojis."
         reply_text = await asyncio.to_thread(ask_gemini, user_text)
         await interaction.followup.send(reply_text)
 
     except Exception as e:
         print(f"Error en /chat: {e}")
-        await interaction.followup.send("Ocurrió un problema temporal al procesar la respuesta.")
+        await interaction.followup.send(f"Error: `{e}`")
 
 # =========================
 # INICIAR BOT
