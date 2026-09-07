@@ -86,13 +86,16 @@ def ask_gemini(prompt: str) -> str:
                 contents=prompt,
                 config=config
             )
-            return response.text.strip()
+            # Validamos que la respuesta contenga texto para evitar NoneType
+            if response and response.text:
+                return response.text.strip()
+            else:
+                return "..."
         except Exception as e:
             error_str = str(e)
-            # Si es error 503 o saturación temporal, reintentamos
             if ("503" in error_str or "UNAVAILABLE" in error_str or "high demand" in error_str) and attempt < max_retries - 1:
                 time.sleep(delay)
-                delay *= 2  # Espera exponencial (2s, 4s...)
+                delay *= 2
                 continue
             raise e
 
@@ -159,7 +162,7 @@ async def on_message(message):
 @app_commands.describe(mensaje="Lo que le quieres decir a MEIKO")
 async def chat(interaction: discord.Interaction, mensaje: str):
     if not ai_client:
-        await interaction.response.send_message("La API Key de Gemini no está configurada.", ephemeral=True)
+        await interaction.response.send_message("La API Key de Gemini não está configurada.", ephemeral=True)
         return
 
     await interaction.response.defer()
