@@ -1,9 +1,4 @@
-Aquí tienes el código completo con la respuesta técnica detallada.
 
-Además, se corrigió el nombre del modelo a gemini-2.5-flash (el modelo estable oficial de Google) para evitar errores de modelo no encontrado (404 Not Found).
-
-Reemplaza todo el contenido de main.py en GitHub:
-Python
 import os
 import asyncio
 import discord
@@ -69,7 +64,7 @@ def ask_gemini(prompt: str) -> str:
     system_instruction = (
         "Eres MEIKO, un asistente amigable, conversacional y muy atento en un servidor de Discord. "
         "Responde de forma concisa pero simpática, usando emojis cuando sea oportuno. "
-        "Aprende de las conversaciones y evoluciona en el chat."
+        "Mantén un tono natural, cercano y claro."
     )
     
     # Se utiliza gemini-2.5-flash (modelo estándar)
