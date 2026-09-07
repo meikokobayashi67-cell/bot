@@ -20,6 +20,9 @@ if not TOKEN:
 
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
+# Nombres exactos de modelos válidos para el SDK google.genai
+MODELS_TO_TRY = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest"]
+
 # =========================
 # SERVIDOR WEB PARA RENDER
 # =========================
@@ -73,11 +76,9 @@ def ask_gemini(prompt: str) -> str:
         max_output_tokens=100
     )
 
-    # Intentamos primero con gemini-2.5-flash y si falla probamos gemini-1.5-flash
-    models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash"]
     last_error = None
 
-    for model_name in models_to_try:
+    for model_name in MODELS_TO_TRY:
         try:
             response = ai_client.models.generate_content(
                 model=model_name,
@@ -87,7 +88,7 @@ def ask_gemini(prompt: str) -> str:
             if response.text:
                 return response.text.strip()
         except Exception as e:
-            print(f"Error con el modelo {model_name}: {e}")
+            print(f"Error probando el modelo {model_name}: {e}")
             last_error = e
 
     raise last_error
@@ -142,7 +143,7 @@ async def on_message(message):
 
             except Exception as e:
                 print(f"Error en Gemini: {e}")
-                await message.reply(f"Error al conectar con la IA: `{e}`")
+                await message.reply("Ocurrió un problema temporal al procesar tu solicitud.")
 
     await bot.process_commands(message)
 
@@ -166,7 +167,7 @@ async def chat(interaction: discord.Interaction, mensaje: str):
 
     except Exception as e:
         print(f"Error en /chat: {e}")
-        await interaction.followup.send(f"Error: `{e}`")
+        await interaction.followup.send("Ocurrió un problema temporal al procesar la respuesta.")
 
 # =========================
 # INICIAR BOT
