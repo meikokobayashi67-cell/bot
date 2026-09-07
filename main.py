@@ -1,4 +1,5 @@
 import os
+import asyncio
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -16,7 +17,7 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 if not TOKEN:
     raise RuntimeError("Falta la variable de entorno DISCORD_TOKEN")
 
-# Inicializar cliente de Gemini si la API key está presente
+# Inicializar cliente de Gemini de la nueva SDK
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
 # =========================
@@ -27,7 +28,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Bot de Discord funcionando correctamente."
+    return "Bot MEIKO funcionando correctamente."
 
 @app.route("/health")
 def health():
@@ -57,6 +58,22 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# Función auxiliar para llamar a Gemini en un hilo secundario sin bloquear el bot
+def ask_gemini(prompt: str) -> str:
+    system_instruction = (
+        "Eres MEIKO, un asistente amigable, conversacional y muy atento en un servidor de Discord. "
+        "Responde de forma concisa pero simpática, usando emojis cuando sea oportuno. "
+        "Mantén un tono natural, cercano y claro."
+    )
+    
+    # Probamos con gemini-2.5-flash
+    response = ai_client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config={"system_instruction": system_instruction}
+    )
+    return response.text
+
 # =========================
 # EVENTOS DE DISCORD
 # =========================
@@ -72,16 +89,13 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    # Ignorar mensajes del propio bot
     if message.author.bot:
         return
 
-    # Verificar si el bot fue mencionado o si es un mensaje directo (DM)
     is_mentioned = bot.user in message.mentions
     is_dm = isinstance(message.channel, discord.DMChannel)
 
     if is_mentioned or is_dm:
-        # Remover la mención (@Bot) del texto para enviarle solo la pregunta a Gemini
         clean_content = message.content.replace(f"<@{bot.user.id}>", "").strip()
 
         if not clean_content:
@@ -89,61 +103,41 @@ async def on_message(message):
             return
 
         if not ai_client:
-            await message.channel.send("⚠️ La función de conversación no está configurada (falta GEMINI_API_KEY).")
+            await message.channel.send("⚠️ Falta configurar la variable GEMINI_API_KEY en Render.")
             return
 
-        # Indicar que el bot está escribiendo
         async with message.channel.typing():
             try:
-                # Instrucción de personalidad para el bot
-                system_instruction = (
-                    "Eres un asistente amigable, conversacional y atento dentro de un servidor de Discord. "
-                    "Responde de forma concisa pero simpática, usando emojis cuando sea apropiado. "
-                    "Mantén un tono natural y cercano."
-                )
+                # Ejecutamos la llamada en un hilo secundario para evitar timeouts
+                reply_text = await asyncio.to_thread(ask_gemini, clean_content)
 
-                response = ai_client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=clean_content,
-                    config={"system_instruction": system_instruction}
-                )
-
-                # Discord limita los mensajes a 2000 caracteres
-                reply_text = response.text
                 if len(reply_text) > 2000:
                     reply_text = reply_text[:1995] + "..."
 
                 await message.reply(reply_text)
 
             except Exception as e:
-                print(f"Error con Gemini: {e}")
+                print(f"Error detallado en Gemini: {e}")
                 await message.reply("Lo siento, tuve un problema procesando tu mensaje. ¡Inténtalo de nuevo!")
 
     await bot.process_commands(message)
 
 # =========================
-# COMANDO SLASH DE CHAT
+# COMANDO SLASH /CHAT
 # =========================
 
 @bot.tree.command(name="chat", description="Habla con la Inteligencia Artificial del bot.")
 @app_commands.describe(mensaje="Lo que quieres decirle al bot")
 async def chat(interaction: discord.Interaction, mensaje: str):
     if not ai_client:
-        await interaction.response.send_message("⚠️ La función de conversación no está activa.", ephemeral=True)
+        await interaction.response.send_message("⚠️ La API Key de Gemini no está configurada.", ephemeral=True)
         return
 
     await interaction.response.defer()
 
     try:
-        response = ai_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=mensaje,
-            config={
-                "system_instruction": "Eres un bot amigable de Discord. Responde de manera concisa y clara."
-            }
-        )
+        reply_text = await asyncio.to_thread(ask_gemini, mensaje)
 
-        reply_text = response.text
         if len(reply_text) > 2000:
             reply_text = reply_text[:1995] + "..."
 
