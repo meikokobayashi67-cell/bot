@@ -20,7 +20,7 @@ if not TOKEN:
 
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
-PRIMARY_MODEL = "gemini-3.6-flash"
+PRIMARY_MODEL = "gemini-2.5-flash"
 FALLBACK_MODEL = "gemini-1.5-flash"
 
 # =========================
@@ -63,16 +63,18 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 def ask_gemini(prompt: str) -> str:
     system_instruction = (
-        "Eres MEIKO, un personaje bromista, ocurrente, irónico y adaptativo de Discord. "
-        "Aprende de la vibra del chat y moldea tu personalidad según lo que dicen los usuarios. "
-        "REGLAS STRICTAS DE FORMATO: "
-        "1. Responde ÚNICAMENTE en UNA SOLA oración corta. "
-        "2. Está TOTALMENTE PROHIBIDO usar emojis. "
-        "3. Sé directa, ingeniosa y sarcástica sin rodeos ni explicaciones largas."
+        "Eres MEIKO, un personaje sarcástico, directo e ingenioso en Discord. "
+        "Adáptate al tono de los usuarios según el historial. "
+        "REGLAS OBLIGATORIAS: "
+        "1. Escribe SOLO UNA oración muy corta (máximo 15 palabras). "
+        "2. NUNCA uses emojis ni emoticonos. "
+        "3. Sé concisa y ácida."
     )
     
     config = types.GenerateContentConfig(
-        system_instruction=system_instruction
+        system_instruction=system_instruction,
+        max_output_tokens=80,  # Limita físicamente la longitud del mensaje
+        temperature=0.8
     )
 
     try:
@@ -81,19 +83,19 @@ def ask_gemini(prompt: str) -> str:
             contents=prompt,
             config=config
         )
-        return response.text
+        return response.text.strip()
     except Exception as e:
-        error_msg = str(e)
-        if "503" in error_msg or "UNAVAILABLE" in error_msg or "429" in error_msg:
-            print(f"Modelo principal saturado, cambiando a respaldo ({FALLBACK_MODEL})...")
+        print(f"[Error con {PRIMARY_MODEL}]: {e}")
+        try:
             response = ai_client.models.generate_content(
                 model=FALLBACK_MODEL,
                 contents=prompt,
                 config=config
             )
-            return response.text
-        else:
-            raise e
+            return response.text.strip()
+        except Exception as err2:
+            print(f"[Error con {FALLBACK_MODEL}]: {err2}")
+            raise err2
 
 # =========================
 # EVENTOS DE DISCORD
@@ -123,34 +125,29 @@ async def on_message(message):
 
         async with message.channel.typing():
             try:
-                # Recuperar hasta 15 mensajes para que aprenda mejor la dinámica del canal
                 history_lines = []
-                async for msg in message.channel.history(limit=15, oldest_first=True):
+                async for msg in message.channel.history(limit=10, oldest_first=True):
                     clean_text = msg.content.replace(f"<@{bot.user.id}>", "").strip()
                     if clean_text:
                         author_name = "MEIKO" if msg.author == bot.user else msg.author.display_name
                         history_lines.append(f"{author_name}: {clean_text}")
 
                 if not history_lines:
-                    await message.channel.send("¿Me mencionas solo para mirarme o me vas a decir algo?")
+                    await message.channel.send("Di algo coherente si quieres que responda.")
                     return
 
                 full_prompt = (
-                    "Analiza el tono de este chat y responde adaptándote a la vibra actual:\n\n"
+                    "Historial del chat para aprender el contexto:\n"
                     + "\n".join(history_lines) +
-                    "\n\nResponde al último mensaje como MEIKO usando una sola oración sin emojis."
+                    "\n\nResponde únicamente al último mensaje siguiendo las reglas."
                 )
 
                 reply_text = await asyncio.to_thread(ask_gemini, full_prompt)
-
-                if len(reply_text) > 2000:
-                    reply_text = reply_text[:1995] + "..."
-
                 await message.reply(reply_text)
 
             except Exception as e:
-                print(f"Error detallado en Gemini: {e}")
-                await message.reply("Los servidores están ocupados en este momento.")
+                print(f"Error procesando mensaje: {e}")
+                await message.reply(f"Error en el sistema: {e}")
 
     await bot.process_commands(message)
 
@@ -158,7 +155,7 @@ async def on_message(message):
 # COMANDO SLASH /CHAT
 # =========================
 
-@bot.tree.command(name="chat", description="Escríbele algo corto a MEIKO.")
+@bot.tree.command(name="chat", description="Escríbele algo a MEIKO.")
 @app_commands.describe(mensaje="Lo que le quieres decir a MEIKO")
 async def chat(interaction: discord.Interaction, mensaje: str):
     if not ai_client:
@@ -168,17 +165,13 @@ async def chat(interaction: discord.Interaction, mensaje: str):
     await interaction.response.defer()
 
     try:
-        user_text = f"{interaction.user.display_name}: {mensaje}\n\nResponde como MEIKO en una sola oración y sin emojis."
+        user_text = f"{interaction.user.display_name}: {mensaje}"
         reply_text = await asyncio.to_thread(ask_gemini, user_text)
-
-        if len(reply_text) > 2000:
-            reply_text = reply_text[:1995] + "..."
-
         await interaction.followup.send(reply_text)
 
     except Exception as e:
         print(f"Error en /chat: {e}")
-        await interaction.followup.send("Ocurrió un problema al procesar tu respuesta.")
+        await interaction.followup.send(f"Error: {e}")
 
 # =========================
 # INICIAR BOT
