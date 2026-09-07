@@ -18,7 +18,6 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 if not TOKEN:
     raise RuntimeError("Falta la variable de entorno DISCORD_TOKEN")
 
-# Inicializar cliente de Gemini
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
 # =========================
@@ -59,16 +58,14 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Función para consultar a Gemini con la personalidad bromista e historial
-def ask_gemini_with_history(contents_list) -> str:
+def ask_gemini(prompt: str) -> str:
     system_instruction = (
         "Eres MEIKO, un personaje bromista, ocurrente, divertido y ligeramente sarcástico dentro de un servidor de Discord. "
-        "Tienes acceso al historial reciente de la conversación. "
+        "Tienes acceso al historial reciente de la conversación en el texto recibido. "
         "Tu objetivo es: "
-        "1. Responder con humor, comentarios ingeniosos o bromas ligeras adaptadas al contexto actual. "
-        "2. Recordar detalles, nombres o bromas internas que hayan ocurrido en los mensajes recientes. "
-        "3. Usar emojis divertidos, exagerar un poco las situaciones para hacer reír y mantener un tono muy fluido y natural. "
-        "4. Ser amistosa y juguetona, jamás ofensiva o hiriente."
+        "1. Responder con humor, comentarios ingeniosos o bromas ligeras adaptadas al contexto. "
+        "2. Recordar detalles o bromas internas mencionadas en los mensajes recientes. "
+        "3. Usar emojis divertidos y mantener un tono fluido, natural y jamás ofensivo."
     )
     
     config = types.GenerateContentConfig(
@@ -77,7 +74,7 @@ def ask_gemini_with_history(contents_list) -> str:
 
     response = ai_client.models.generate_content(
         model="gemini-3.6-flash",
-        contents=contents_list,
+        contents=prompt,
         config=config
     )
     return response.text
@@ -110,32 +107,22 @@ async def on_message(message):
 
         async with message.channel.typing():
             try:
-                # Recuperar los últimos 12 mensajes para que tenga más contexto para sus bromas
-                history_messages = []
-                async for msg in message.channel.history(limit=12, oldest_first=True):
-                    if not msg.content:
-                        continue
-                    
-                    role = "model" if msg.author == bot.user else "user"
-                    clean_msg = msg.content.replace(f"<@{bot.user.id}>", "").strip()
-                    
-                    if clean_msg:
-                        # Formateamos indicando quién dijo qué para que sepa a quién hacerle la broma
-                        user_name = msg.author.display_name if role == "user" else "MEIKO"
-                        content_text = f"{user_name}: {clean_msg}" if role == "user" else clean_msg
-                        
-                        history_messages.append(
-                            types.Content(
-                                role=role,
-                                parts=[types.Part.from_text(text=content_text)]
-                            )
-                        )
+                # Extraer últimos 10 mensajes y armar un contexto de chat simple y limpio
+                history_lines = []
+                async for msg in message.channel.history(limit=10, oldest_first=True):
+                    clean_text = msg.content.replace(f"<@{bot.user.id}>", "").strip()
+                    if clean_text:
+                        author_name = "MEIKO" if msg.author == bot.user else msg.author.display_name
+                        history_lines.append(f"{author_name}: {clean_text}")
 
-                if not history_messages:
+                if not history_lines:
                     await message.channel.send(f"😜 ¡Ey, {message.author.mention}! ¿Apareciste a contarme un chiste o qué?")
                     return
 
-                reply_text = await asyncio.to_thread(ask_gemini_with_history, history_messages)
+                # Unir todo el contexto en una sola cadena de texto
+                full_prompt = "Historial del chat reciente:\n" + "\n".join(history_lines) + "\n\nResponde como MEIKO al último mensaje enviado."
+
+                reply_text = await asyncio.to_thread(ask_gemini, full_prompt)
 
                 if len(reply_text) > 2000:
                     reply_text = reply_text[:1995] + "..."
@@ -144,7 +131,7 @@ async def on_message(message):
 
             except Exception as e:
                 print(f"Error detallado en Gemini: {e}")
-                await message.reply("Se me trabó un circuito intentando pensar en un chiste. ¡Inténtalo de nuevo! 🤖💥")
+                await message.reply(f"⚠️ **Error técnico:** `{e}`")
 
     await bot.process_commands(message)
 
@@ -162,15 +149,8 @@ async def chat(interaction: discord.Interaction, mensaje: str):
     await interaction.response.defer()
 
     try:
-        user_text = f"{interaction.user.display_name}: {mensaje}"
-        prompt_content = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=user_text)]
-            )
-        ]
-        
-        reply_text = await asyncio.to_thread(ask_gemini_with_history, prompt_content)
+        user_text = f"{interaction.user.display_name}: {mensaje}\n\nResponde como MEIKO."
+        reply_text = await asyncio.to_thread(ask_gemini, user_text)
 
         if len(reply_text) > 2000:
             reply_text = reply_text[:1995] + "..."
@@ -179,7 +159,7 @@ async def chat(interaction: discord.Interaction, mensaje: str):
 
     except Exception as e:
         print(f"Error en /chat: {e}")
-        await interaction.followup.send("Se cayó el chiste... ocurrió un error procesando tu mensaje. 🙈")
+        await interaction.followup.send(f"⚠️ **Error técnico:** `{e}`")
 
 # =========================
 # INICIAR BOT
