@@ -20,7 +20,8 @@ if not TOKEN:
 
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
-PRIMARY_MODEL = "gemini-1.5-pro"
+# Usamos el nombre base genérico que el SDK mapea automáticamente al modelo disponible
+PRIMARY_MODEL = "gemini-flash"
 
 # =========================
 # SERVIDOR WEB PARA RENDER
