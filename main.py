@@ -20,6 +20,10 @@ if not TOKEN:
 
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
+# Lista de modelos por orden de preferencia
+PRIMARY_MODEL = "gemini-3.6-flash"
+FALLBACK_MODEL = "gemini-1.5-flash"
+
 # =========================
 # SERVIDOR WEB PARA RENDER
 # =========================
@@ -72,12 +76,27 @@ def ask_gemini(prompt: str) -> str:
         system_instruction=system_instruction
     )
 
-    response = ai_client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=prompt,
-        config=config
-    )
-    return response.text
+    # Intento 1: Modelo principal (gemini-3.6-flash)
+    try:
+        response = ai_client.models.generate_content(
+            model=PRIMARY_MODEL,
+            contents=prompt,
+            config=config
+        )
+        return response.text
+    except Exception as e:
+        error_msg = str(e)
+        # Si el modelo principal está saturado (503 / 429), reintentamos con el modelo de respaldo
+        if "503" in error_msg or "UNAVAILABLE" in error_msg or "429" in error_msg:
+            print(f"Modelo principal saturado, cambiando a respaldo ({FALLBACK_MODEL})...")
+            response = ai_client.models.generate_content(
+                model=FALLBACK_MODEL,
+                contents=prompt,
+                config=config
+            )
+            return response.text
+        else:
+            raise e
 
 # =========================
 # EVENTOS DE DISCORD
@@ -107,7 +126,7 @@ async def on_message(message):
 
         async with message.channel.typing():
             try:
-                # Extraer últimos 10 mensajes y armar un contexto de chat simple y limpio
+                # Extraer últimos 10 mensajes para dar contexto
                 history_lines = []
                 async for msg in message.channel.history(limit=10, oldest_first=True):
                     clean_text = msg.content.replace(f"<@{bot.user.id}>", "").strip()
@@ -119,8 +138,7 @@ async def on_message(message):
                     await message.channel.send(f"😜 ¡Ey, {message.author.mention}! ¿Apareciste a contarme un chiste o qué?")
                     return
 
-                # Unir todo el contexto en una sola cadena de texto
-                full_prompt = "Historial del chat reciente:\n" + "\n".join(history_lines) + "\n\nResponde como MEIKO al último mensaje enviado."
+                full_prompt = "Historial del chat reciente:\n" + "\n".join(history_lines) + "\n\nResponde como MEIKO al último mensaje."
 
                 reply_text = await asyncio.to_thread(ask_gemini, full_prompt)
 
@@ -131,7 +149,7 @@ async def on_message(message):
 
             except Exception as e:
                 print(f"Error detallado en Gemini: {e}")
-                await message.reply(f"⚠️ **Error técnico:** `{e}`")
+                await message.reply("Oye, los servidores de Google están súper congestionados ahora mismo. 🤯 ¡Prueba preguntarme de nuevo en unos segundos!")
 
     await bot.process_commands(message)
 
@@ -159,7 +177,7 @@ async def chat(interaction: discord.Interaction, mensaje: str):
 
     except Exception as e:
         print(f"Error en /chat: {e}")
-        await interaction.followup.send(f"⚠️ **Error técnico:** `{e}`")
+        await interaction.followup.send("Los servidores de la IA están saturados en este momento. 🙈 ¡Inténtalo de nuevo en un rato!")
 
 # =========================
 # INICIAR BOT
