@@ -59,7 +59,7 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Función para consultar a Gemini sin bloquear el hilo principal
+# Función para consultar a Gemini en un hilo secundario
 def ask_gemini(prompt: str) -> str:
     system_instruction = (
         "Eres MEIKO, un asistente amigable, conversacional y muy atento en un servidor de Discord. "
@@ -67,9 +67,9 @@ def ask_gemini(prompt: str) -> str:
         "Mantén un tono natural, cercano y claro."
     )
     
-    # Se utiliza gemini-2.5-flash (modelo estándar)
+    # Se utiliza el modelo recomendado gemini-3.6-flash
     response = ai_client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.6-flash",
         contents=prompt,
         config={"system_instruction": system_instruction}
     )
@@ -119,8 +119,7 @@ async def on_message(message):
 
             except Exception as e:
                 print(f"Error detallado en Gemini: {e}")
-                # Muestra el error exacto directamente en Discord
-                await message.reply(f"⚠️ **Error técnico de Gemini:** `{e}`")
+                await message.reply("Lo siento, tuve un problema procesando tu mensaje. ¡Inténtalo de nuevo!")
 
     await bot.process_commands(message)
 
@@ -147,7 +146,7 @@ async def chat(interaction: discord.Interaction, mensaje: str):
 
     except Exception as e:
         print(f"Error en /chat: {e}")
-        await interaction.followup.send(f"⚠️ **Error técnico:** `{e}`")
+        await interaction.followup.send("Ocurrió un error al procesar la respuesta.")
 
 # =========================
 # INICIAR BOT
