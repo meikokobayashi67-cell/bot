@@ -20,8 +20,9 @@ if not TOKEN:
 
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
+# Nombres exactos de modelos soportados por la API
 PRIMARY_MODEL = "gemini-2.5-flash"
-FALLBACK_MODEL = "gemini-1.5-flash"
+FALLBACK_MODEL = "gemini-1.5-flash-latest"
 
 # =========================
 # SERVIDOR WEB PARA RENDER
@@ -64,16 +65,16 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 def ask_gemini(prompt: str) -> str:
     system_instruction = (
         "Eres MEIKO, un personaje sarcástico, directo e ingenioso en Discord. "
-        "Adáptate al tono de los usuarios según el historial. "
+        "Aprende de la vibra y contexto del chat recibido para moldear tu actitud. "
         "REGLAS OBLIGATORIAS: "
-        "1. Escribe SOLO UNA oración muy corta (máximo 15 palabras). "
-        "2. NUNCA uses emojis ni emoticonos. "
-        "3. Sé concisa y ácida."
+        "1. Responde ÚNICAMENTE en UNA SOLA oración corta. "
+        "2. Está TOTALMENTE PROHIBIDO usar emojis o emoticonos. "
+        "3. Sé concisa, mordaz y ve al grano."
     )
     
     config = types.GenerateContentConfig(
         system_instruction=system_instruction,
-        max_output_tokens=80,  # Limita físicamente la longitud del mensaje
+        max_output_tokens=100,
         temperature=0.8
     )
 
@@ -126,20 +127,20 @@ async def on_message(message):
         async with message.channel.typing():
             try:
                 history_lines = []
-                async for msg in message.channel.history(limit=10, oldest_first=True):
+                async for msg in message.channel.history(limit=12, oldest_first=True):
                     clean_text = msg.content.replace(f"<@{bot.user.id}>", "").strip()
                     if clean_text:
                         author_name = "MEIKO" if msg.author == bot.user else msg.author.display_name
                         history_lines.append(f"{author_name}: {clean_text}")
 
                 if not history_lines:
-                    await message.channel.send("Di algo coherente si quieres que responda.")
+                    await message.channel.send("Di algo con sentido si quieres que te responda.")
                     return
 
                 full_prompt = (
-                    "Historial del chat para aprender el contexto:\n"
+                    "Historial del chat para entender el contexto y la actitud:\n"
                     + "\n".join(history_lines) +
-                    "\n\nResponde únicamente al último mensaje siguiendo las reglas."
+                    "\n\nResponde únicamente al último mensaje como MEIKO cumpliendo todas las reglas."
                 )
 
                 reply_text = await asyncio.to_thread(ask_gemini, full_prompt)
@@ -147,7 +148,7 @@ async def on_message(message):
 
             except Exception as e:
                 print(f"Error procesando mensaje: {e}")
-                await message.reply(f"Error en el sistema: {e}")
+                await message.reply("No me apetece responder a eso ahora mismo.")
 
     await bot.process_commands(message)
 
@@ -155,7 +156,7 @@ async def on_message(message):
 # COMANDO SLASH /CHAT
 # =========================
 
-@bot.tree.command(name="chat", description="Escríbele algo a MEIKO.")
+@bot.tree.command(name="chat", description="Escríbele algo corto a MEIKO.")
 @app_commands.describe(mensaje="Lo que le quieres decir a MEIKO")
 async def chat(interaction: discord.Interaction, mensaje: str):
     if not ai_client:
@@ -171,7 +172,7 @@ async def chat(interaction: discord.Interaction, mensaje: str):
 
     except Exception as e:
         print(f"Error en /chat: {e}")
-        await interaction.followup.send(f"Error: {e}")
+        await interaction.followup.send("Ocurrió un problema temporal al procesar la respuesta.")
 
 # =========================
 # INICIAR BOT
