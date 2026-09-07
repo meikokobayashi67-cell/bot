@@ -20,7 +20,6 @@ if not TOKEN:
 
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
-# Lista de modelos por orden de preferencia
 PRIMARY_MODEL = "gemini-3.6-flash"
 FALLBACK_MODEL = "gemini-1.5-flash"
 
@@ -32,7 +31,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Bot MEIKO (Modo Bromista) funcionando correctamente."
+    return "Bot MEIKO funcionando correctamente."
 
 @app.route("/health")
 def health():
@@ -64,19 +63,18 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 def ask_gemini(prompt: str) -> str:
     system_instruction = (
-        "Eres MEIKO, un personaje bromista, ocurrente, divertido y ligeramente sarcástico dentro de un servidor de Discord. "
-        "Tienes acceso al historial reciente de la conversación en el texto recibido. "
-        "Tu objetivo es: "
-        "1. Responder con humor, comentarios ingeniosos o bromas ligeras adaptadas al contexto. "
-        "2. Recordar detalles o bromas internas mencionadas en los mensajes recientes. "
-        "3. Usar emojis divertidos y mantener un tono fluido, natural y jamás ofensivo."
+        "Eres MEIKO, un personaje bromista, ocurrente, irónico y adaptativo de Discord. "
+        "Aprende de la vibra del chat y moldea tu personalidad según lo que dicen los usuarios. "
+        "REGLAS STRICTAS DE FORMATO: "
+        "1. Responde ÚNICAMENTE en UNA SOLA oración corta. "
+        "2. Está TOTALMENTE PROHIBIDO usar emojis. "
+        "3. Sé directa, ingeniosa y sarcástica sin rodeos ni explicaciones largas."
     )
     
     config = types.GenerateContentConfig(
         system_instruction=system_instruction
     )
 
-    # Intento 1: Modelo principal (gemini-3.6-flash)
     try:
         response = ai_client.models.generate_content(
             model=PRIMARY_MODEL,
@@ -86,7 +84,6 @@ def ask_gemini(prompt: str) -> str:
         return response.text
     except Exception as e:
         error_msg = str(e)
-        # Si el modelo principal está saturado (503 / 429), reintentamos con el modelo de respaldo
         if "503" in error_msg or "UNAVAILABLE" in error_msg or "429" in error_msg:
             print(f"Modelo principal saturado, cambiando a respaldo ({FALLBACK_MODEL})...")
             response = ai_client.models.generate_content(
@@ -121,24 +118,28 @@ async def on_message(message):
 
     if is_mentioned or is_dm:
         if not ai_client:
-            await message.channel.send("⚠️ Falta configurar la variable GEMINI_API_KEY en Render.")
+            await message.channel.send("Falta configurar la variable GEMINI_API_KEY en Render.")
             return
 
         async with message.channel.typing():
             try:
-                # Extraer últimos 10 mensajes para dar contexto
+                # Recuperar hasta 15 mensajes para que aprenda mejor la dinámica del canal
                 history_lines = []
-                async for msg in message.channel.history(limit=10, oldest_first=True):
+                async for msg in message.channel.history(limit=15, oldest_first=True):
                     clean_text = msg.content.replace(f"<@{bot.user.id}>", "").strip()
                     if clean_text:
                         author_name = "MEIKO" if msg.author == bot.user else msg.author.display_name
                         history_lines.append(f"{author_name}: {clean_text}")
 
                 if not history_lines:
-                    await message.channel.send(f"😜 ¡Ey, {message.author.mention}! ¿Apareciste a contarme un chiste o qué?")
+                    await message.channel.send("¿Me mencionas solo para mirarme o me vas a decir algo?")
                     return
 
-                full_prompt = "Historial del chat reciente:\n" + "\n".join(history_lines) + "\n\nResponde como MEIKO al último mensaje."
+                full_prompt = (
+                    "Analiza el tono de este chat y responde adaptándote a la vibra actual:\n\n"
+                    + "\n".join(history_lines) +
+                    "\n\nResponde al último mensaje como MEIKO usando una sola oración sin emojis."
+                )
 
                 reply_text = await asyncio.to_thread(ask_gemini, full_prompt)
 
@@ -149,7 +150,7 @@ async def on_message(message):
 
             except Exception as e:
                 print(f"Error detallado en Gemini: {e}")
-                await message.reply("Oye, los servidores de Google están súper congestionados ahora mismo. 🤯 ¡Prueba preguntarme de nuevo en unos segundos!")
+                await message.reply("Los servidores están ocupados en este momento.")
 
     await bot.process_commands(message)
 
@@ -157,17 +158,17 @@ async def on_message(message):
 # COMANDO SLASH /CHAT
 # =========================
 
-@bot.tree.command(name="chat", description="Escríbele algo a MEIKO para recibir una respuesta divertida.")
+@bot.tree.command(name="chat", description="Escríbele algo corto a MEIKO.")
 @app_commands.describe(mensaje="Lo que le quieres decir a MEIKO")
 async def chat(interaction: discord.Interaction, mensaje: str):
     if not ai_client:
-        await interaction.response.send_message("⚠️ La API Key de Gemini no está configurada.", ephemeral=True)
+        await interaction.response.send_message("La API Key de Gemini no está configurada.", ephemeral=True)
         return
 
     await interaction.response.defer()
 
     try:
-        user_text = f"{interaction.user.display_name}: {mensaje}\n\nResponde como MEIKO."
+        user_text = f"{interaction.user.display_name}: {mensaje}\n\nResponde como MEIKO en una sola oración y sin emojis."
         reply_text = await asyncio.to_thread(ask_gemini, user_text)
 
         if len(reply_text) > 2000:
@@ -177,7 +178,7 @@ async def chat(interaction: discord.Interaction, mensaje: str):
 
     except Exception as e:
         print(f"Error en /chat: {e}")
-        await interaction.followup.send("Los servidores de la IA están saturados en este momento. 🙈 ¡Inténtalo de nuevo en un rato!")
+        await interaction.followup.send("Ocurrió un problema al procesar tu respuesta.")
 
 # =========================
 # INICIAR BOT
