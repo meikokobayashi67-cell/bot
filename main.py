@@ -1,5 +1,6 @@
 import os
 import asyncio
+import time
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -20,7 +21,6 @@ if not TOKEN:
 
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
-# Usamos el modelo actual requerido por la API
 PRIMARY_MODEL = "gemini-3.6-flash"
 
 # =========================
@@ -76,12 +76,25 @@ def ask_gemini(prompt: str) -> str:
         max_output_tokens=100
     )
 
-    response = ai_client.models.generate_content(
-        model=PRIMARY_MODEL,
-        contents=prompt,
-        config=config
-    )
-    return response.text.strip()
+    max_retries = 3
+    delay = 2
+
+    for attempt in range(max_retries):
+        try:
+            response = ai_client.models.generate_content(
+                model=PRIMARY_MODEL,
+                contents=prompt,
+                config=config
+            )
+            return response.text.strip()
+        except Exception as e:
+            error_str = str(e)
+            # Si es error 503 o saturación temporal, reintentamos
+            if ("503" in error_str or "UNAVAILABLE" in error_str or "high demand" in error_str) and attempt < max_retries - 1:
+                time.sleep(delay)
+                delay *= 2  # Espera exponencial (2s, 4s...)
+                continue
+            raise e
 
 # =========================
 # EVENTOS DE DISCORD
