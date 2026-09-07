@@ -20,8 +20,13 @@ if not TOKEN:
 
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
-# Nombres exactos de modelos válidos para el SDK google.genai
-MODELS_TO_TRY = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest"]
+# Lista extendida de modelos. Probaremos desde el más nuevo hasta los más básicos.
+MODELS_TO_TRY = [
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-8b",
+    "gemini-pro"
+]
 
 # =========================
 # SERVIDOR WEB PARA RENDER
@@ -76,7 +81,7 @@ def ask_gemini(prompt: str) -> str:
         max_output_tokens=100
     )
 
-    last_error = None
+    errores = []
 
     for model_name in MODELS_TO_TRY:
         try:
@@ -88,10 +93,10 @@ def ask_gemini(prompt: str) -> str:
             if response.text:
                 return response.text.strip()
         except Exception as e:
-            print(f"Error probando el modelo {model_name}: {e}")
-            last_error = e
+            errores.append(f"{model_name}: {e}")
 
-    raise last_error
+    # Si todos fallan, lanzamos todos los errores juntos para verlos
+    raise Exception(" | ".join(errores))
 
 # =========================
 # EVENTOS DE DISCORD
@@ -142,8 +147,10 @@ async def on_message(message):
                 await message.reply(reply_text)
 
             except Exception as e:
-                print(f"Error en Gemini: {e}")
-                await message.reply("Ocurrió un problema temporal al procesar tu solicitud.")
+                error_msg = str(e)[:1900]  # Límite de Discord
+                print(f"Error en Gemini: {error_msg}")
+                # Imprimimos el error EXACTO para saber qué bloquea la API
+                await message.reply(f"**Error de API:** `{error_msg}`")
 
     await bot.process_commands(message)
 
@@ -166,8 +173,9 @@ async def chat(interaction: discord.Interaction, mensaje: str):
         await interaction.followup.send(reply_text)
 
     except Exception as e:
-        print(f"Error en /chat: {e}")
-        await interaction.followup.send("Ocurrió un problema temporal al procesar la respuesta.")
+        error_msg = str(e)[:1900]
+        print(f"Error en /chat: {error_msg}")
+        await interaction.followup.send(f"**Error de API:** `{error_msg}`")
 
 # =========================
 # INICIAR BOT
