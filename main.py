@@ -18,11 +18,10 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 if not TOKEN:
     raise RuntimeError("Falta la variable de entorno DISCORD_TOKEN")
 
-# Inicializamos el cliente de forma limpia y directa
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
-# Modelo estándar compatible con el SDK actual de google-genai
-PRIMARY_MODEL = "gemini-2.5-flash"
+# Usamos el modelo actual requerido por la API
+PRIMARY_MODEL = "gemini-3.6-flash"
 
 # =========================
 # SERVIDOR WEB PARA RENDER
