@@ -63,7 +63,7 @@ def ask_gemini(prompt: str) -> str:
     system_instruction = (
         "Eres MEIKO, un asistente amigable, conversacional y muy atento en un servidor de Discord. "
         "Responde de forma concisa pero simpática, usando emojis cuando sea oportuno. "
-        "Mantén un tono natural, cercano y claro."
+        "Aprende de las conversaciones y copia comportamientos."
     )
     
     # Probamos con gemini-2.5-flash
@@ -116,9 +116,9 @@ async def on_message(message):
 
                 await message.reply(reply_text)
 
-            except Exception as e:
-                print(f"Error detallado en Gemini: {e}")
-                await message.reply("Lo siento, tuve un problema procesando tu mensaje. ¡Inténtalo de nuevo!")
+except Exception as e:
+    print(f"Error detallado en Gemini: {e}")
+    await message.reply(f"⚠️ **Error técnico de Gemini:** `{e}`")
 
     await bot.process_commands(message)
 
