@@ -20,7 +20,6 @@ if not TOKEN:
 
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
-# Usamos un modelo alternativo altamente estable
 PRIMARY_MODEL = "gemini-1.5-pro"
 
 # =========================
@@ -132,8 +131,9 @@ async def on_message(message):
                 await message.reply(reply_text)
 
             except Exception as e:
-                print(f"Error en Gemini: {e}")
-                await message.reply("Ocurrió un error inesperado al procesar tu mensaje.")
+                error_msg = str(e)[:1900]
+                print(f"Error en Gemini: {error_msg}")
+                await message.reply(f"**Error detallado:** `{error_msg}`")
 
     await bot.process_commands(message)
 
@@ -156,8 +156,9 @@ async def chat(interaction: discord.Interaction, mensaje: str):
         await interaction.followup.send(reply_text)
 
     except Exception as e:
-        print(f"Error en /chat: {e}")
-        await interaction.followup.send("Ocurrió un error inesperado al procesar tu mensaje.")
+        error_msg = str(e)[:1900]
+        print(f"Error en /chat: {error_msg}")
+        await interaction.followup.send(f"**Error detallado:** `{error_msg}`")
 
 # =========================
 # INICIAR BOT
