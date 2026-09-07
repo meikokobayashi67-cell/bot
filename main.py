@@ -20,11 +20,7 @@ if not TOKEN:
 
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
-# Usamos el modelo exacto que la API nos pidió en el error
-MODELS_TO_TRY = [
-    "gemini-3.6-flash",
-    "gemini-2.5-flash"
-]
+PRIMARY_MODEL = "gemini-3.6-flash"
 
 # =========================
 # SERVIDOR WEB PARA RENDER
@@ -64,7 +60,7 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-def ask_gemini(prompt: str) -> str:
+async def ask_gemini_with_retry(prompt: str) -> str:
     system_instruction = (
         "Eres MEIKO, un personaje sarcástico, directo e ingenioso en Discord. "
         "Aprende de la vibra y contexto del chat recibido para moldear tu actitud. "
@@ -79,21 +75,28 @@ def ask_gemini(prompt: str) -> str:
         max_output_tokens=100
     )
 
-    errores = []
-
-    for model_name in MODELS_TO_TRY:
+    # Intentaremos hasta 3 veces si hay alta demanda (error 503)
+    max_retries = 3
+    for attempt in range(max_retries):
         try:
             response = ai_client.models.generate_content(
-                model=model_name,
+                model=PRIMARY_MODEL,
                 contents=prompt,
                 config=config
             )
             if response.text:
                 return response.text.strip()
         except Exception as e:
-            errores.append(f"{model_name}: {e}")
+            error_str = str(e)
+            print(f"Intento {attempt + 1} fallido: {error_str}")
+            # Si es error de alta demanda (503), esperamos 2 segundos y reintentamos
+            if "503" in error_str or "UNAVAILABLE" in error_str:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2)
+                    continue
+            raise e
 
-    raise Exception(" | ".join(errores))
+    raise Exception("Los servidores siguen ocupados. Inténtalo de nuevo en unos segundos.")
 
 # =========================
 # EVENTOS DE DISCORD
@@ -140,13 +143,13 @@ async def on_message(message):
                     "\n\nResponde únicamente al último mensaje como MEIKO usando una sola oración sin emojis."
                 )
 
-                reply_text = await asyncio.to_thread(ask_gemini, full_prompt)
+                reply_text = await ask_gemini_with_retry(full_prompt)
                 await message.reply(reply_text)
 
             except Exception as e:
                 error_msg = str(e)[:1900]
                 print(f"Error en Gemini: {error_msg}")
-                await message.reply(f"**Error de API:** `{error_msg}`")
+                await message.reply(f"Los servidores están saturados temporalmente. Inténtalo de nuevo en un momento.")
 
     await bot.process_commands(message)
 
@@ -165,13 +168,13 @@ async def chat(interaction: discord.Interaction, mensaje: str):
 
     try:
         user_text = f"{interaction.user.display_name}: {mensaje}\n\nResponde como MEIKO en una sola oración y sin emojis."
-        reply_text = await asyncio.to_thread(ask_gemini, user_text)
+        reply_text = await ask_gemini_with_retry(user_text)
         await interaction.followup.send(reply_text)
 
     except Exception as e:
         error_msg = str(e)[:1900]
         print(f"Error en /chat: {error_msg}")
-        await interaction.followup.send(f"**Error de API:** `{error_msg}`")
+        await interaction.followup.send("Los servidores están saturados temporalmente. Inténtalo de nuevo en un momento.")
 
 # =========================
 # INICIAR BOT
