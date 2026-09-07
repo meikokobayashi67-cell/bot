@@ -20,12 +20,10 @@ if not TOKEN:
 
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
-# Lista extendida de modelos. Probaremos desde el más nuevo hasta los más básicos.
+# Usamos el modelo exacto que la API nos pidió en el error
 MODELS_TO_TRY = [
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-8b",
-    "gemini-pro"
+    "gemini-3.6-flash",
+    "gemini-2.5-flash"
 ]
 
 # =========================
@@ -95,7 +93,6 @@ def ask_gemini(prompt: str) -> str:
         except Exception as e:
             errores.append(f"{model_name}: {e}")
 
-    # Si todos fallan, lanzamos todos los errores juntos para verlos
     raise Exception(" | ".join(errores))
 
 # =========================
@@ -147,9 +144,8 @@ async def on_message(message):
                 await message.reply(reply_text)
 
             except Exception as e:
-                error_msg = str(e)[:1900]  # Límite de Discord
+                error_msg = str(e)[:1900]
                 print(f"Error en Gemini: {error_msg}")
-                # Imprimimos el error EXACTO para saber qué bloquea la API
                 await message.reply(f"**Error de API:** `{error_msg}`")
 
     await bot.process_commands(message)
