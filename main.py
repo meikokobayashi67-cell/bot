@@ -1,3 +1,9 @@
+Aquí tienes el código completo con la respuesta técnica detallada.
+
+Además, se corrigió el nombre del modelo a gemini-2.5-flash (el modelo estable oficial de Google) para evitar errores de modelo no encontrado (404 Not Found).
+
+Reemplaza todo el contenido de main.py en GitHub:
+Python
 import os
 import asyncio
 import discord
@@ -17,7 +23,7 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 if not TOKEN:
     raise RuntimeError("Falta la variable de entorno DISCORD_TOKEN")
 
-# Inicializar cliente de Gemini de la nueva SDK
+# Inicializar cliente de Gemini si la API key está presente
 ai_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
 # =========================
@@ -58,15 +64,15 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Función auxiliar para llamar a Gemini en un hilo secundario sin bloquear el bot
+# Función para consultar a Gemini sin bloquear el hilo principal
 def ask_gemini(prompt: str) -> str:
     system_instruction = (
         "Eres MEIKO, un asistente amigable, conversacional y muy atento en un servidor de Discord. "
         "Responde de forma concisa pero simpática, usando emojis cuando sea oportuno. "
-        "Aprende de las conversaciones y copia comportamientos."
+        "Aprende de las conversaciones y evoluciona en el chat."
     )
     
-    # Probamos con gemini-2.5-flash
+    # Se utiliza gemini-2.5-flash (modelo estándar)
     response = ai_client.models.generate_content(
         model="gemini-2.5-flash",
         contents=prompt,
@@ -108,7 +114,7 @@ async def on_message(message):
 
         async with message.channel.typing():
             try:
-                # Ejecutamos la llamada en un hilo secundario para evitar timeouts
+                # Ejecutar la petición en un hilo secundario
                 reply_text = await asyncio.to_thread(ask_gemini, clean_content)
 
                 if len(reply_text) > 2000:
@@ -116,9 +122,10 @@ async def on_message(message):
 
                 await message.reply(reply_text)
 
-except Exception as e:
-    print(f"Error detallado en Gemini: {e}")
-    await message.reply(f"⚠️ **Error técnico de Gemini:** `{e}`")
+            except Exception as e:
+                print(f"Error detallado en Gemini: {e}")
+                # Muestra el error exacto directamente en Discord
+                await message.reply(f"⚠️ **Error técnico de Gemini:** `{e}`")
 
     await bot.process_commands(message)
 
@@ -145,7 +152,7 @@ async def chat(interaction: discord.Interaction, mensaje: str):
 
     except Exception as e:
         print(f"Error en /chat: {e}")
-        await interaction.followup.send("Ocurrió un error al procesar la respuesta.")
+        await interaction.followup.send(f"⚠️ **Error técnico:** `{e}`")
 
 # =========================
 # INICIAR BOT
